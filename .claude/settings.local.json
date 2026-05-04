@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(ping -n 4 127.0.0.1)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001\" -TimeoutSec 5 -UseBasicParsing; \"Status: $\\($r.StatusCode\\)\"; $r.Content.Substring\\(0,300\\) } catch { \"Error: $_\" })",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)",
+      "Bash(gh auth *)",
+      "PowerShell(gh auth *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(npx vite *)"
+    ]
+  }
+}
