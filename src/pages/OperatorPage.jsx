@@ -58,6 +58,11 @@ export default function OperatorPage() {
   const [session,          setSession]          = useState([]);
   const [showCongLink,     setShowCongLink]     = useState(false);
   const [copied,           setCopied]           = useState(false);
+  const [showSettings,     setShowSettings]     = useState(false);
+  const [settingsAnthKey,  setSettingsAnthKey]  = useState('');
+  const [settingsBibleKey, setSettingsBibleKey] = useState('');
+  const [settingsSaving,   setSettingsSaving]   = useState(false);
+  const [settingsSaved,    setSettingsSaved]    = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────
   const recognitionRef      = useRef(null);
@@ -300,6 +305,21 @@ export default function OperatorPage() {
     }
   }
 
+  // ── Save API keys to Supabase ─────────────────────────────
+  async function handleSaveApiKeys(e) {
+    e.preventDefault();
+    if (!church?.id) return;
+    setSettingsSaving(true);
+    const updates = {};
+    if (settingsAnthKey.trim())  updates.anthropic_key = settingsAnthKey.trim();
+    if (settingsBibleKey.trim()) updates.apibible_key  = settingsBibleKey.trim();
+    await supabase.from('churches').update(updates).eq('id', church.id);
+    // Reload page so AuthContext picks up fresh church settings
+    setSettingsSaving(false);
+    setSettingsSaved(true);
+    setTimeout(() => window.location.reload(), 800);
+  }
+
   const TAB_LABELS    = { display: 'Verse', crossrefs: 'Cross-Refs', history: 'History', transcript: 'Transcript' };
   const DISPLAY_MODES = { projection: 'Projection', sidepanel: 'Side Panel', mobile: 'Mobile' };
 
@@ -376,6 +396,12 @@ export default function OperatorPage() {
           {/* Nav */}
           <Link to="/admin"   className="text-[#3a4a5a] hover:text-[#8a8a8a] font-sans text-xs px-1 transition-colors hidden sm:inline">Admin</Link>
           <Link to="/archive" className="text-[#3a4a5a] hover:text-[#8a8a8a] font-sans text-xs px-1 transition-colors hidden sm:inline">Archive</Link>
+          <button
+            onClick={() => { setShowSettings(p => !p); setSettingsSaved(false); setSettingsAnthKey(''); setSettingsBibleKey(''); }}
+            title="API key settings"
+            className={`font-sans text-sm px-1 transition-colors ${showSettings ? 'text-[#d4af37]' : 'text-[#3a4a5a] hover:text-[#8a8a8a]'}`}>
+            ⚙
+          </button>
           <button onClick={signOut} className="text-[#3a4a5a] hover:text-red-400 font-sans text-xs px-1 transition-colors">Sign out</button>
         </div>
       </header>
@@ -400,6 +426,43 @@ export default function OperatorPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── API key settings panel ───────────────────────────── */}
+      {showSettings && (
+        <div className="bg-[#0d1b2a] border-b border-[#1e3050] px-4 py-3 shrink-0">
+          <form onSubmit={handleSaveApiKeys} className="max-w-xl space-y-3">
+            <p className="text-[#c8b89a] font-sans text-xs font-semibold uppercase tracking-wider">Update API Keys</p>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-[#5a6a7a] font-sans text-xs mb-1">Anthropic key</label>
+                <input
+                  type="password" value={settingsAnthKey} onChange={e => setSettingsAnthKey(e.target.value)}
+                  placeholder="sk-ant-… (leave blank to keep current)"
+                  autoComplete="off"
+                  className="w-full bg-[#1a2a3a] border border-[#243444] rounded-lg px-3 py-2 font-sans text-sm text-[#f5ead6] placeholder-[#3a4a5a] focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[#5a6a7a] font-sans text-xs mb-1">API.Bible key</label>
+                <input
+                  type="password" value={settingsBibleKey} onChange={e => setSettingsBibleKey(e.target.value)}
+                  placeholder="optional"
+                  autoComplete="off"
+                  className="w-full bg-[#1a2a3a] border border-[#243444] rounded-lg px-3 py-2 font-sans text-sm text-[#f5ead6] placeholder-[#3a4a5a] focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={settingsSaving || (!settingsAnthKey.trim() && !settingsBibleKey.trim())}
+                className="self-end bg-[#d4af37] hover:bg-[#c4a030] disabled:opacity-40 disabled:cursor-not-allowed text-[#0d1b2a] font-sans font-semibold px-4 py-2 rounded-lg text-sm transition-colors shrink-0"
+              >
+                {settingsSaving ? 'Saving…' : settingsSaved ? '✓ Saved' : 'Save'}
+              </button>
+            </div>
+            <p className="text-[#3a4a5a] font-sans text-xs">Saving reloads the page to apply the new key.</p>
+          </form>
         </div>
       )}
 
