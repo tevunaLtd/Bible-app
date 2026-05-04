@@ -26,7 +26,7 @@ import CongregationPage from './pages/CongregationPage';
 import ProjectionPage   from './pages/ProjectionPage';
 
 function ProtectedRoute({ children }) {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, isLocalMode } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -39,8 +39,8 @@ function ProtectedRoute({ children }) {
 
   if (!session) return <Navigate to="/login" replace />;
 
-  // Profile exists but setup not completed (no org/church assigned yet)
-  if (profile && !profile.church_id && location.pathname !== '/setup') {
+  // Local mode has church_id = 'local' — skip setup redirect
+  if (!isLocalMode && profile && !profile.church_id && location.pathname !== '/setup') {
     return <Navigate to="/setup" replace />;
   }
 

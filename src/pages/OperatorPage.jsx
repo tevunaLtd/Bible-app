@@ -25,6 +25,8 @@ import {
 import VerseDisplay          from '../components/VerseDisplay';
 import CrossReferencePanel   from '../components/CrossReferencePanel';
 import DisambiguationModal   from '../components/DisambiguationModal';
+import SelectionPopup        from '../components/SelectionPopup';
+import ProjectionPreview     from '../components/ProjectionPreview';
 
 export default function OperatorPage() {
   const { profile, church, signOut } = useAuth();
@@ -63,6 +65,8 @@ export default function OperatorPage() {
   const [settingsBibleKey, setSettingsBibleKey] = useState('');
   const [settingsSaving,   setSettingsSaving]   = useState(false);
   const [settingsSaved,    setSettingsSaved]    = useState(false);
+  const [selectionPopup,   setSelectionPopup]   = useState(null);
+  const [projFontSize,     setProjFontSize]     = useState(3);
 
   // ── Refs ──────────────────────────────────────────────────
   const recognitionRef      = useRef(null);
@@ -72,9 +76,21 @@ export default function OperatorPage() {
   const chunkBufferRef      = useRef('');
   const chunkTimerRef       = useRef(null);
 
-  const congUrl = church ? `${window.location.origin}/c/${church.slug}` : '';
-  const projUrl = church ? `${window.location.origin}/projection/${church.id}` : '';
-  const colors  = { primary: church?.primary_color, bg: church?.bg_color, text: church?.text_color };
+  const congUrl      = church ? `${window.location.origin}/c/${church.slug}` : '';
+  const projUrl      = church ? `${window.location.origin}/projection/${church.id}?fontSize=${projFontSize}` : '';
+  const colors       = { primary: church?.primary_color, bg: church?.bg_color, text: church?.text_color };
+  const anthropicKey = church?.anthropic_key || localStorage.getItem('bible_app_anthropic_key') || '';
+
+  function openProjectionWindow() {
+    window.open(projUrl, 'projection', 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no');
+  }
+
+  // ── Auto-open settings if no API key found ────────────────
+  useEffect(() => {
+    if (!church?.anthropic_key && !localStorage.getItem('bible_app_anthropic_key')) {
+      setShowSettings(true);
+    }
+  }, [church]);
 
   // ── Load translations + create/load sermon on mount ──────
   useEffect(() => {
@@ -180,7 +196,7 @@ export default function OperatorPage() {
       // Cross-refs — async, non-blocking
       setIsLoadingXRefs(true);
       setCrossRefs([]);
-      claudeGenerateCrossRefs(church?.anthropic_key, reference, result.text)
+      claudeGenerateCrossRefs(anthropicKey, reference, result.text)
         .then(async xrefData => {
           const enriched = await Promise.allSettled(
             (xrefData.crossReferences ?? []).map(async xref => {
@@ -205,11 +221,11 @@ export default function OperatorPage() {
 
   // ── NLP ───────────────────────────────────────────────────
   const processChunk = useCallback(async (chunk) => {
-    if (!chunk.trim() || !church?.anthropic_key) return;
+    if (!chunk.trim() || !anthropicKey) return;
     setIsProcessingNLP(true);
     try {
       const result = await claudeDetectReferences(
-        church.anthropic_key,
+        anthropicKey,
         buildTranscriptContext(transcriptChunksRef.current, TRANSCRIPT_WINDOW_MS),
         buildPassageContext(passageContextRef.current, MAX_CONTEXT_PASSAGES),
         chunk
@@ -286,7 +302,7 @@ export default function OperatorPage() {
     if (!input || isManualLoading) return;
     setIsManualLoading(true); setError(null);
     try {
-      const result = await claudeDetectReferences(church?.anthropic_key, '', '', input);
+      const result = await claudeDetectReferences(anthropicKey, '', '', input);
       const refs = result.references ?? [];
       if (!refs.length) setError(`Could not parse "${input}" as a Bible reference.`);
       else { await loadAndDisplayVerse(refs[0]); setManualInput(''); }
@@ -305,16 +321,100 @@ export default function OperatorPage() {
     }
   }
 
-  // ── Save API keys to Supabase ─────────────────────────────
+  // ── Text-selection → verse preview ───────────────────────
+  async function handleMouseUp(e) {
+    // Ignore clicks inside inputs/buttons/the popup itself
+    const tag = e.target?.tagName;
+    if (['INPUT','TEXTAREA','SELECT','BUTTON','A'].includes(tag)) return;
+    if (e.target?.closest?.('[data-selection-popup]')) return;
+
+    const selection = window.getSelection();
+    const text = selection?.toString().trim();
+    if (!text || text.length < 4) { setSelectionPopup(null); return; }
+    if (!anthropicKey) return;
+
+    const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range) return;
+    const rect = range.getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
+
+    const x = rect.left + rect.width / 2;
+    const y = rect.top;                   // fixed-position: viewport coords
+
+    setSelectionPopup({ x, y, text, loading: true, verse: null });
+
+    try {
+      const result = await claudeDetectReferences(anthropicKey, '', buildPassageContext(passageContextRef.current, MAX_CONTEXT_PASSAGES), text);
+      const ref = result.references?.[0];
+      if (ref && ref.confidence >= 0.5) {
+        const apiBibleKey = church?.apibible_key || localStorage.getItem('bible_app_apibible_key') || '';
+        const content = await fetchVerseContent(apiBibleKey, selectedTranslation, ref.book, ref.chapter, ref.verseStart, ref.verseEnd);
+        setSelectionPopup(prev => prev ? {
+          ...prev, loading: false,
+          verse: {
+            ...ref,
+            text: content.text,
+            verses: content.verses ?? [],
+            reference: formatReference(ref),
+            translationName: selectedTranslation.name,
+            timestamp: Date.now(),
+          },
+        } : null);
+      } else {
+        setSelectionPopup(prev => prev ? { ...prev, loading: false, verse: null } : null);
+      }
+    } catch {
+      setSelectionPopup(null);
+    }
+  }
+
+  function confirmSelectionVerse(verse) {
+    setCurrentVerse(verse);
+    setSession(prev => [...prev, verse]);
+    passageContextRef.current = [...passageContextRef.current, verse].slice(-MAX_CONTEXT_PASSAGES);
+    pushVerseToSupabase(verse);
+    setActiveTab('display');
+    setSelectionPopup(null);
+    window.getSelection()?.removeAllRanges();
+
+    // Generate cross-refs non-blocking
+    setIsLoadingXRefs(true);
+    setCrossRefs([]);
+    const apiBibleKey = church?.apibible_key || localStorage.getItem('bible_app_apibible_key') || '';
+    claudeGenerateCrossRefs(anthropicKey, verse.reference, verse.text)
+      .then(async xrefData => {
+        const enriched = await Promise.allSettled(
+          (xrefData.crossReferences ?? []).map(async xref => {
+            try {
+              const r = await fetchVerseContent(apiBibleKey, selectedTranslation, xref.book, xref.chapter, xref.verseStart, xref.verseEnd);
+              return { ...xref, text: r.text };
+            } catch { return xref; }
+          })
+        );
+        setCrossRefs(enriched.filter(r => r.status === 'fulfilled').map(r => r.value));
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingXRefs(false));
+  }
+
+  // ── Save API keys (localStorage always; Supabase when available) ──
   async function handleSaveApiKeys(e) {
     e.preventDefault();
-    if (!church?.id) return;
     setSettingsSaving(true);
-    const updates = {};
-    if (settingsAnthKey.trim())  updates.anthropic_key = settingsAnthKey.trim();
-    if (settingsBibleKey.trim()) updates.apibible_key  = settingsBibleKey.trim();
-    await supabase.from('churches').update(updates).eq('id', church.id);
-    // Reload page so AuthContext picks up fresh church settings
+    const anthKey   = settingsAnthKey.trim();
+    const bibleKey  = settingsBibleKey.trim();
+    // Always persist to localStorage so app works without Supabase schema
+    if (anthKey)  localStorage.setItem('bible_app_anthropic_key', anthKey);
+    if (bibleKey) localStorage.setItem('bible_app_apibible_key',  bibleKey);
+    // Also try to save to Supabase (silently ignore if tables don't exist yet)
+    if (church?.id) {
+      const updates = {};
+      if (anthKey)  updates.anthropic_key = anthKey;
+      if (bibleKey) updates.apibible_key  = bibleKey;
+      if (Object.keys(updates).length) {
+        await supabase.from('churches').update(updates).eq('id', church.id).then(() => {});
+      }
+    }
     setSettingsSaving(false);
     setSettingsSaved(true);
     setTimeout(() => window.location.reload(), 800);
@@ -324,7 +424,16 @@ export default function OperatorPage() {
   const DISPLAY_MODES = { projection: 'Projection', sidepanel: 'Side Panel', mobile: 'Mobile' };
 
   return (
-    <div className="min-h-screen flex flex-col overflow-hidden" style={{ background: church?.bg_color || '#0a1520', color: church?.text_color || '#f5ead6' }}>
+    <div className="min-h-screen flex flex-col overflow-hidden" style={{ background: church?.bg_color || '#0a1520', color: church?.text_color || '#f5ead6' }}
+      onMouseUp={handleMouseUp}>
+
+      <SelectionPopup
+        popup={selectionPopup}
+        onDisplay={confirmSelectionVerse}
+        onDismiss={() => { setSelectionPopup(null); window.getSelection()?.removeAllRanges(); }}
+        colors={colors}
+      />
+
       <DisambiguationModal
         item={disambigQueue[0] ?? null}
         onAccept={item => { setDisambigQueue(prev => prev.filter(i => i !== item)); loadAndDisplayVerse(item); }}
@@ -420,7 +529,7 @@ export default function OperatorPage() {
             </div>
             <div>
               <p className="text-[#5a6a7a] text-xs uppercase tracking-wider mb-1">Projection screen</p>
-              <button onClick={() => window.open(projUrl, 'projection', 'width=1920,height=1080,menubar=no,toolbar=no')}
+              <button onClick={openProjectionWindow}
                 className="text-xs text-[#d4af37] hover:underline bg-[#1a2a3a] border border-[#243444] px-3 py-1 rounded-lg">
                 Open projection window ↗
               </button>
@@ -434,12 +543,19 @@ export default function OperatorPage() {
         <div className="bg-[#0d1b2a] border-b border-[#1e3050] px-4 py-3 shrink-0">
           <form onSubmit={handleSaveApiKeys} className="max-w-xl space-y-3">
             <p className="text-[#c8b89a] font-sans text-xs font-semibold uppercase tracking-wider">Update API Keys</p>
+            {!anthropicKey && (
+              <p className="text-amber-400 font-sans text-xs bg-amber-950/40 border border-amber-900/50 rounded-lg px-3 py-2">
+                No Anthropic key found — enter your key below to enable verse detection and cross-references.
+              </p>
+            )}
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="block text-[#5a6a7a] font-sans text-xs mb-1">Anthropic key</label>
+                <label className="block text-[#5a6a7a] font-sans text-xs mb-1">
+                  Anthropic key {anthropicKey && <span className="text-green-500">✓ saved</span>}
+                </label>
                 <input
                   type="password" value={settingsAnthKey} onChange={e => setSettingsAnthKey(e.target.value)}
-                  placeholder="sk-ant-… (leave blank to keep current)"
+                  placeholder={anthropicKey ? 'sk-ant-… (leave blank to keep current)' : 'sk-ant-api03-…  (required)'}
                   autoComplete="off"
                   className="w-full bg-[#1a2a3a] border border-[#243444] rounded-lg px-3 py-2 font-sans text-sm text-[#f5ead6] placeholder-[#3a4a5a] focus:outline-none focus:border-[#d4af37]"
                 />
@@ -476,7 +592,7 @@ export default function OperatorPage() {
 
       {/* ── Body ─────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <main className={`flex flex-col flex-1 overflow-hidden ${displayMode === 'sidepanel' ? 'max-w-2xl border-r border-[#1e3050]' : ''}`}>
+        <main className={`flex flex-col overflow-hidden ${displayMode === 'projection' ? 'w-[480px] xl:w-[540px] shrink-0 border-r border-[#1e3050]' : displayMode === 'sidepanel' ? 'max-w-2xl flex-1 border-r border-[#1e3050]' : 'flex-1'}`}>
 
           {/* Tab bar */}
           <div className="flex border-b border-[#1e3050] bg-[#0d1b2a] shrink-0">
@@ -569,6 +685,20 @@ export default function OperatorPage() {
             )}
           </div>
         </main>
+
+        {/* Projection preview panel */}
+        {displayMode === 'projection' && (
+          <div className="flex-1 overflow-hidden">
+            <ProjectionPreview
+              verse={currentVerse}
+              church={church}
+              fontSize={projFontSize}
+              onFontChange={delta => setProjFontSize(prev => Math.min(5, Math.max(1, prev + delta)))}
+              onClear={clearDisplay}
+              onOpen={openProjectionWindow}
+            />
+          </div>
+        )}
 
         {/* Side panel cross-refs */}
         {displayMode === 'sidepanel' && (
