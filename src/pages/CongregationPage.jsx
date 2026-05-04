@@ -21,6 +21,8 @@ export default function CongregationPage() {
 
   // Load church by slug, then subscribe to live_sessions
   useEffect(() => {
+    let channel = null;
+
     async function init() {
       const { data: ch, error: chErr } = await supabase
         .from('churches')
@@ -31,12 +33,12 @@ export default function CongregationPage() {
       if (chErr || !ch) { setError('Church not found.'); setLoading(false); return; }
       setChurch(ch);
 
-      // Load current verse (in case page loads after a verse is already displayed)
+      // maybeSingle() returns null (not an error) when no row exists yet
       const { data: ls } = await supabase
         .from('live_sessions')
         .select('*')
         .eq('church_id', ch.id)
-        .single();
+        .maybeSingle();
 
       if (ls && !ls.is_cleared && ls.verse_reference) {
         setVerse({ text: ls.verse_text, reference: ls.verse_reference, translationName: ls.translation_name, verses: ls.verses ?? [] });
@@ -44,7 +46,7 @@ export default function CongregationPage() {
       setLoading(false);
 
       // Subscribe to real-time updates
-      const channel = supabase
+      channel = supabase
         .channel(`congregation-${ch.id}`)
         .on('postgres_changes', {
           event:  'UPDATE',
@@ -59,11 +61,12 @@ export default function CongregationPage() {
           }
         })
         .subscribe();
-
-      return () => supabase.removeChannel(channel);
     }
 
     init();
+
+    // Cleanup runs when component unmounts or slug changes
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [slug]);
 
   const gold    = church?.primary_color || '#d4af37';

@@ -18,16 +18,18 @@ export default function ProjectionPage() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    let channel = null;
+
     async function init() {
-      const { data: ch } = await supabase.from('churches').select('*').eq('id', churchId).single();
+      const { data: ch } = await supabase.from('churches').select('*').eq('id', churchId).maybeSingle();
       setChurch(ch);
 
-      const { data: ls } = await supabase.from('live_sessions').select('*').eq('church_id', churchId).single();
+      const { data: ls } = await supabase.from('live_sessions').select('*').eq('church_id', churchId).maybeSingle();
       if (ls && !ls.is_cleared && ls.verse_reference) {
         show({ text: ls.verse_text, reference: ls.verse_reference, translationName: ls.translation_name, verses: ls.verses ?? [] });
       }
 
-      const channel = supabase
+      channel = supabase
         .channel(`projection-${churchId}`)
         .on('postgres_changes', {
           event:  'UPDATE', schema: 'public', table: 'live_sessions',
@@ -40,10 +42,11 @@ export default function ProjectionPage() {
           }
         })
         .subscribe();
-
-      return () => supabase.removeChannel(channel);
     }
+
     init();
+
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [churchId]);
 
   function show(v) {

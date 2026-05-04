@@ -14,7 +14,7 @@
  *   /setup            SetupPage
  */
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 import LoginPage        from './pages/LoginPage';
@@ -27,6 +27,7 @@ import ProjectionPage   from './pages/ProjectionPage';
 
 function ProtectedRoute({ children }) {
   const { session, profile, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -39,7 +40,7 @@ function ProtectedRoute({ children }) {
   if (!session) return <Navigate to="/login" replace />;
 
   // Profile exists but setup not completed (no org/church assigned yet)
-  if (profile && !profile.church_id && window.location.pathname !== '/setup') {
+  if (profile && !profile.church_id && location.pathname !== '/setup') {
     return <Navigate to="/setup" replace />;
   }
 
