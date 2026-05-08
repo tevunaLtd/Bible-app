@@ -75,6 +75,8 @@ export default function OperatorPage() {
   const processingLockRef   = useRef(false);
   const chunkBufferRef      = useRef('');
   const chunkTimerRef       = useRef(null);
+  const currentVerseRef     = useRef(null);
+  currentVerseRef.current = currentVerse; // always reflects latest render
 
   const congUrl      = church ? `${window.location.origin}/c/${church.slug}` : '';
   const projUrl      = church ? `${window.location.origin}/projection/${church.id}?fontSize=${projFontSize}` : '';
@@ -219,9 +221,39 @@ export default function OperatorPage() {
     }
   }, [church, selectedTranslation, pushVerseToSupabase]);
 
+  // ── Navigation commands (next/prev verse/chapter) ─────────
+  const NAV_PATTERNS = [
+    { re: /\bnext\s+chapter\b/i,                  action: 'nextChapter' },
+    { re: /\b(?:previous|prev|go\s+back\s+a?)\s+chapter\b/i, action: 'prevChapter' },
+    { re: /\bnext\s+verse\b/i,                    action: 'nextVerse'   },
+    { re: /\b(?:previous|prev)\s+verse\b/i,       action: 'prevVerse'   },
+    { re: /^\s*next\s*$/i,                        action: 'nextVerse'   },
+    { re: /^\s*(?:previous|prev|go\s+back)\s*$/i, action: 'prevVerse'   },
+  ];
+
+  function resolveNavRef(action, verse) {
+    if (!verse) return null;
+    const { book, chapter, verseStart } = verse;
+    if (action === 'nextVerse')    return { book, chapter, verseStart: verseStart + 1 };
+    if (action === 'prevVerse')    return { book, chapter, verseStart: Math.max(1, verseStart - 1) };
+    if (action === 'nextChapter')  return { book, chapter: chapter + 1, verseStart: 1 };
+    if (action === 'prevChapter')  return { book, chapter: Math.max(1, chapter - 1), verseStart: 1 };
+    return null;
+  }
+
   // ── NLP ───────────────────────────────────────────────────
   const processChunk = useCallback(async (chunk) => {
     if (!chunk.trim() || !anthropicKey) return;
+
+    // Check for navigation commands first — no API call needed
+    for (const { re, action } of NAV_PATTERNS) {
+      if (re.test(chunk)) {
+        const nav = resolveNavRef(action, currentVerseRef.current);
+        if (nav) { await loadAndDisplayVerse(nav); return; }
+        break;
+      }
+    }
+
     setIsProcessingNLP(true);
     try {
       const result = await claudeDetectReferences(
