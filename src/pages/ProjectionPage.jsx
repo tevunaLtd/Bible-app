@@ -36,6 +36,21 @@ export default function ProjectionPage() {
   const [verse,   setVerse]   = useState(null);
   const [visible, setVisible] = useState(false);
 
+  // BroadcastChannel — receives verses from the operator tab instantly (works in local mode too)
+  useEffect(() => {
+    const bc = new BroadcastChannel('bible-live');
+    bc.onmessage = ({ data }) => {
+      if (data.type === 'clear') {
+        setVisible(false);
+        setTimeout(() => setVerse(null), 500);
+      } else if (data.type === 'verse') {
+        show(data.verse);
+      }
+    };
+    return () => bc.close();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let channel = null;
 
@@ -142,6 +157,12 @@ export default function ProjectionPage() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── LIVE indicator ─────────────────────────────────── */}
+      <div className="fixed top-4 right-4 flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full pointer-events-none">
+        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+        <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-red-400">Live</span>
       </div>
 
       {/* ── Watermark ──────────────────────────────────────── */}

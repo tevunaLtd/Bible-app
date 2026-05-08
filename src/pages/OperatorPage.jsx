@@ -68,6 +68,7 @@ export default function OperatorPage() {
   const [settingsSaved,    setSettingsSaved]    = useState(false);
   const [selectionPopup,   setSelectionPopup]   = useState(null);
   const [projFontSize,     setProjFontSize]     = useState(3);
+  const [isProjecting,     setIsProjecting]     = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────
   const recognitionRef      = useRef(null);
@@ -77,7 +78,21 @@ export default function OperatorPage() {
   const chunkBufferRef      = useRef('');
   const chunkTimerRef       = useRef(null);
   const currentVerseRef     = useRef(null);
+  const broadcastRef        = useRef(null);
+  const projWindowRef       = useRef(null);
+  const projCheckRef        = useRef(null);
   currentVerseRef.current = currentVerse; // always reflects latest render
+
+  // ── BroadcastChannel — projection sync across tabs ────────
+  useEffect(() => {
+    const bc = new BroadcastChannel('bible-live');
+    broadcastRef.current = bc;
+    return () => {
+      bc.close();
+      broadcastRef.current = null;
+      clearInterval(projCheckRef.current);
+    };
+  }, []);
 
   const congUrl      = church ? `${window.location.origin}/c/${church.slug}` : '';
   const projUrl      = church ? `${window.location.origin}/projection/${church.id}?fontSize=${projFontSize}` : '';
@@ -85,7 +100,17 @@ export default function OperatorPage() {
   const anthropicKey = church?.anthropic_key || localStorage.getItem('bible_app_anthropic_key') || '';
 
   function openProjectionWindow() {
-    window.open(projUrl, 'projection', 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no');
+    const win = window.open(projUrl, 'projection', 'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no');
+    projWindowRef.current = win;
+    setIsProjecting(true);
+    clearInterval(projCheckRef.current);
+    projCheckRef.current = setInterval(() => {
+      if (!projWindowRef.current || projWindowRef.current.closed) {
+        setIsProjecting(false);
+        projWindowRef.current = null;
+        clearInterval(projCheckRef.current);
+      }
+    }, 1000);
   }
 
   // ── Auto-open settings if no API key found ────────────────
@@ -192,6 +217,7 @@ export default function OperatorPage() {
         timestamp: Date.now(),
       };
       setCurrentVerse(verse);
+      broadcastRef.current?.postMessage({ type: 'verse', verse });
       setSession(prev => [...prev, verse]);
       passageContextRef.current = [...passageContextRef.current, verse].slice(-MAX_CONTEXT_PASSAGES);
       processingLockRef.current = false; // release early — Supabase write doesn't need the lock
@@ -341,6 +367,7 @@ export default function OperatorPage() {
   // ── Clear display ─────────────────────────────────────────
   async function clearDisplay() {
     setCurrentVerse(null);
+    broadcastRef.current?.postMessage({ type: 'clear' });
     if (church) {
       await supabase.from('live_sessions').upsert(
         { church_id: church.id, is_cleared: true, updated_at: new Date().toISOString() },
@@ -763,6 +790,7 @@ export default function OperatorPage() {
               onFontChange={delta => setProjFontSize(prev => Math.min(5, Math.max(1, prev + delta)))}
               onClear={clearDisplay}
               onOpen={openProjectionWindow}
+              isProjecting={isProjecting}
             />
           </div>
         )}

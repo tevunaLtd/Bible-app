@@ -9,7 +9,7 @@
  *   onClear      — () => void
  *   onOpen       — () => void  (opens full-screen window)
  */
-export default function ProjectionPreview({ verse, church, fontSize = 3, onFontChange, onClear, onOpen }) {
+export default function ProjectionPreview({ verse, church, fontSize = 3, onFontChange, onClear, onOpen, isProjecting = false }) {
   const gold    = church?.primary_color || '#d4af37';
   const bg      = church?.bg_color      || '#0d1b2a';
   const textCol = church?.text_color    || '#f5ead6';
@@ -26,11 +26,17 @@ export default function ProjectionPreview({ verse, church, fontSize = 3, onFontC
 
       {/* ── Controls bar ─────────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#1e3050] shrink-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          {isProjecting && (
+            <span className="flex items-center gap-1 bg-red-950 border border-red-800 px-1.5 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              <span className="font-sans text-[9px] font-bold uppercase tracking-widest text-red-300">Live</span>
+            </span>
+          )}
           <span className={`w-2 h-2 rounded-full ${verse ? 'bg-green-400 animate-pulse' : 'bg-[#2a3a4a]'}`} />
           <span className="font-sans text-[10px] font-semibold uppercase tracking-widest"
                 style={{ color: verse ? '#8a9aaa' : '#3a4a5a' }}>
-            {verse ? 'Live' : 'Standby'}
+            {verse ? 'On screen' : 'Standby'}
           </span>
         </div>
 
