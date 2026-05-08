@@ -111,6 +111,12 @@ export default function OperatorPage() {
         clearInterval(projCheckRef.current);
       }
     }, 1000);
+    // Re-send current verse once the projection page has mounted its BroadcastChannel listener
+    if (currentVerseRef.current) {
+      setTimeout(() => {
+        broadcastRef.current?.postMessage({ type: 'verse', verse: currentVerseRef.current });
+      }, 1200);
+    }
   }
 
   // ── Auto-open settings if no API key found ────────────────
