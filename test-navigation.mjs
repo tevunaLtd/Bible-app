@@ -134,7 +134,10 @@ log('"last chapter" → John 21:1', r13 === 'John 21:1', r13);
 
 console.log('\n[14] John 3:999 → "not available"');
 await enter('John 3:999');
-await page.waitForTimeout(5000);
+await page.waitForFunction(
+  () => /not available/i.test(document.querySelector('.bg-red-950 p')?.textContent ?? ''),
+  { timeout: 10000 }
+).catch(() => {});
 const err14 = await getError();
 log('Shows "not available"', /not available/i.test(err14 ?? ''), err14 ?? '(no error shown)');
 
