@@ -692,7 +692,7 @@ export default function OperatorPage() {
 
       {/* ── Body ─────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <main className={`flex flex-col overflow-hidden ${displayMode === 'projection' ? 'w-[480px] xl:w-[540px] shrink-0 border-r border-[#1e3050]' : displayMode === 'sidepanel' ? 'max-w-2xl flex-1 border-r border-[#1e3050]' : 'flex-1'}`}>
+        <main className={`flex flex-col overflow-hidden ${displayMode === 'projection' ? 'w-[240px] xl:w-[270px] shrink-0 border-r border-[#1e3050]' : displayMode === 'sidepanel' ? 'max-w-2xl flex-1 border-r border-[#1e3050]' : 'flex-1'}`}>
 
           {/* Tab bar */}
           <div className="flex border-b border-[#1e3050] bg-[#0d1b2a] shrink-0">
