@@ -1,124 +1,119 @@
 /**
  * test-navigation.mjs — navigation command tests
- *
- * Usage:
- *   ANTHROPIC_API_KEY=sk-ant-... node test-navigation.mjs
- *
- * Runs against the dev server at http://localhost:3000 using local mode
- * (no Supabase login required). An Anthropic key is needed to load the
- * initial verse via the manual input; navigation commands need no key.
+ * No Anthropic API key needed — Anthropic calls are mocked in-browser.
+ * Run: node test-navigation.mjs
  */
 import { chromium } from '@playwright/test';
 
-const BASE        = 'http://localhost:3000';
-const ANTH_KEY    = process.env.ANTHROPIC_API_KEY ?? '';
-const INPUT_PH    = 'Type a reference';
-const WAIT_VERSE  = 5000;   // ms — allow API round-trip for verse load
-const WAIT_NAV    = 3000;   // ms — nav is local, just needs re-render
+const BASE = 'http://localhost:3000';
 
-if (!ANTH_KEY) {
-  console.error('Set ANTHROPIC_API_KEY=sk-ant-... to run this test.');
-  process.exit(1);
-}
-
-const browser = await chromium.launch({ headless: false, slowMo: 200 });
+const browser = await chromium.launch({ headless: false });
 const ctx  = await browser.newContext();
 const page = await ctx.newPage();
 
-// ── Inject local mode + Anthropic key before the page loads ─────────────────
-await page.addInitScript(({ key }) => {
+// ── Inject local mode + mock Anthropic fetch ─────────────────────────────────
+await page.addInitScript(() => {
   localStorage.setItem('bible_app_local_mode', 'true');
-  localStorage.setItem('bible_app_anthropic_key', key);
-}, { key: ANTH_KEY });
+  localStorage.setItem('bible_app_anthropic_key', 'sk-ant-test-key');
+
+  const _fetch = window.fetch;
+  window.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.anthropic.com')) {
+      const body   = JSON.parse(opts?.body ?? '{}');
+      const chunk  = body?.messages?.[0]?.content ?? '';
+      const m      = chunk.match(/(\w[\w\s]*?)\s+(\d+):(\d+)/);
+      const ref    = m
+        ? { book: m[1].trim(), chapter: +m[2], verseStart: +m[3], verseEnd: +m[3] }
+        : { book: 'John', chapter: 3, verseStart: 16, verseEnd: 16 };
+      const payload = { references: [{ raw: chunk, ...ref, confidence: 0.99, isPartial: false }] };
+      return new Response(
+        JSON.stringify({ content: [{ text: JSON.stringify(payload) }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    return _fetch(url, opts);
+  };
+});
 
 await page.goto(`${BASE}/operator`);
 await page.waitForTimeout(2000);
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 async function getRef() {
-  // VerseDisplay renders reference as: <p class="font-semibold text-lg tracking-wide">John 3:16</p>
-  const el = page.locator('p').filter({ hasText: /\w+ \d+:\d+/ }).first();
-  return el.textContent({ timeout: 1000 }).catch(() => null);
+  const all = await page.locator('p').filter({ hasText: /\w+ \d+:\d+/ }).allTextContents().catch(() => []);
+  return all[0]?.trim() ?? null;
 }
 
 async function getError() {
-  return page.locator('[class*="red"] p, [class*="red-300"]').first()
-    .textContent({ timeout: 500 }).catch(() => null);
+  return page.locator('.bg-red-950 p').first().textContent({ timeout: 800 }).catch(() => null);
 }
 
 async function enter(text) {
-  const input = page.getByPlaceholder(INPUT_PH);
-  await input.fill(text);
-  await input.press('Enter');
+  await page.getByPlaceholder('Type a reference').fill(text);
+  await page.getByPlaceholder('Type a reference').press('Enter');
+}
+
+/** Enter a command, then wait until the displayed reference becomes `expected` (or timeout). */
+async function enterExpect(text, expected) {
+  await enter(text);
+  await page.waitForFunction(
+    (exp) => [...document.querySelectorAll('p')]
+      .some(p => p.textContent.trim() === exp),
+    expected,
+    { timeout: 7000 }
+  ).catch(() => {});
+  return getRef();
+}
+
+/** Enter a command and wait a fixed time (for cases where the ref shouldn't change). */
+async function enterWait(text, ms = 4000) {
+  await enter(text);
+  await page.waitForTimeout(ms);
+  return getRef();
 }
 
 const results = [];
 function log(label, ok, detail = '') {
-  const mark = ok ? '✓' : '✗';
-  console.log(`  ${mark}  ${label}${detail ? '  →  ' + detail : ''}`);
+  console.log(`  ${ok ? '✓' : '✗'}  ${label}${detail ? '  →  ' + detail : ''}`);
   results.push({ label, ok });
 }
 
-// ── 1. Load starting verse via Claude ────────────────────────────────────────
+// ── Tests ─────────────────────────────────────────────────────────────────────
 console.log('\n[1] Load John 3:16');
-await enter('John 3:16');
-await page.waitForTimeout(WAIT_VERSE);
-const ref1 = await getRef();
-log('John 3:16 loaded', !!ref1, ref1 ?? '(nothing visible)');
+const r1 = await enterExpect('John 3:16', 'John 3:16');
+log('John 3:16 loaded', r1 === 'John 3:16', r1 ?? '(nothing)');
 
-// ── 2. next verse ─────────────────────────────────────────────────────────────
-console.log('\n[2] "next verse"');
-await enter('next verse');
-await page.waitForTimeout(WAIT_NAV);
-const ref2 = await getRef();
-log('"next verse" → 3:17', ref2?.includes('17'), ref2);
+console.log('\n[2] "next verse"  (expect 3:17)');
+const r2 = await enterExpect('next verse', 'John 3:17');
+log('"next verse" → 3:17', r2 === 'John 3:17', r2);
 
-// ── 3. next ───────────────────────────────────────────────────────────────────
-console.log('\n[3] "next"');
-await enter('next');
-await page.waitForTimeout(WAIT_NAV);
-const ref3 = await getRef();
-log('"next" → 3:18', ref3?.includes('18'), ref3);
+console.log('\n[3] "next"  (expect 3:18)');
+const r3 = await enterExpect('next', 'John 3:18');
+log('"next" → 3:18', r3 === 'John 3:18', r3);
 
-// ── 4. previous verse ─────────────────────────────────────────────────────────
-console.log('\n[4] "previous verse"');
-await enter('previous verse');
-await page.waitForTimeout(WAIT_NAV);
-const ref4 = await getRef();
-log('"previous verse" → 3:17', ref4?.includes('17'), ref4);
+console.log('\n[4] "previous verse"  (expect 3:17)');
+const r4 = await enterExpect('previous verse', 'John 3:17');
+log('"previous verse" → 3:17', r4 === 'John 3:17', r4);
 
-// ── 5. go back ────────────────────────────────────────────────────────────────
-console.log('\n[5] "go back"');
-await enter('go back');
-await page.waitForTimeout(WAIT_NAV);
-const ref5 = await getRef();
-log('"go back" → 3:16', ref5?.includes('16'), ref5);
+console.log('\n[5] "go back"  (expect 3:16)');
+const r5 = await enterExpect('go back', 'John 3:16');
+log('"go back" → 3:16', r5 === 'John 3:16', r5);
 
-// ── 6. next chapter ───────────────────────────────────────────────────────────
-console.log('\n[6] "next chapter"');
-await enter('next chapter');
-await page.waitForTimeout(WAIT_VERSE);
-const ref6 = await getRef();
-log('"next chapter" → John 4:1', ref6?.includes('4') && ref6?.includes('1'), ref6);
+console.log('\n[6] "next chapter"  (expect John 4:1)');
+const r6 = await enterExpect('next chapter', 'John 4:1');
+log('"next chapter" → John 4:1', r6 === 'John 4:1', r6);
 
-// ── 7. previous chapter ───────────────────────────────────────────────────────
-console.log('\n[7] "previous chapter"');
-await enter('previous chapter');
-await page.waitForTimeout(WAIT_VERSE);
-const ref7 = await getRef();
-log('"previous chapter" → John 3:1', ref7?.includes('3') && ref7?.includes('1'), ref7);
+console.log('\n[7] "previous chapter"  (expect John 3:1)');
+const r7 = await enterExpect('previous chapter', 'John 3:1');
+log('"previous chapter" → John 3:1', r7 === 'John 3:1', r7);
 
-// ── 8. clamp at verse 1 ──────────────────────────────────────────────────────
-console.log('\n[8] "go back" at verse 1 (clamp)');
-await enter('go back');
-await page.waitForTimeout(WAIT_NAV);
-const ref8 = await getRef();
-log('"go back" at v1 stays at 3:1', ref8?.includes('3:1'), ref8);
+console.log('\n[8] "go back" at verse 1 (clamp — ref stays 3:1)');
+const r8 = await enterWait('go back', 3000);
+log('"go back" clamped at 3:1', r8 === 'John 3:1', r8);
 
-// ── 9. out-of-range: friendly error ──────────────────────────────────────────
-console.log('\n[9] Out-of-range verse → friendly error');
+console.log('\n[9] John 3:999 → "not available"');
 await enter('John 3:999');
-await page.waitForTimeout(WAIT_VERSE);
+await page.waitForTimeout(5000);
 const err9 = await getError();
 log('Shows "not available"', /not available/i.test(err9 ?? ''), err9 ?? '(no error shown)');
 

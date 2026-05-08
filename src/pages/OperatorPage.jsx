@@ -193,7 +193,8 @@ export default function OperatorPage() {
       setCurrentVerse(verse);
       setSession(prev => [...prev, verse]);
       passageContextRef.current = [...passageContextRef.current, verse].slice(-MAX_CONTEXT_PASSAGES);
-      await pushVerseToSupabase(verse);
+      processingLockRef.current = false; // release early — Supabase write doesn't need the lock
+      pushVerseToSupabase(verse);        // fire-and-forget
 
       // Cross-refs — async, non-blocking
       setIsLoadingXRefs(true);
@@ -214,7 +215,7 @@ export default function OperatorPage() {
         .finally(() => setIsLoadingXRefs(false));
 
     } catch (err) {
-      const notFound = /404|not found|no verse/i.test(err.message);
+      const notFound = /404|not found|no verse|failed to fetch|networkerror/i.test(err.message);
       setError(notFound
         ? `${formatReference(ref)} is not available.`
         : `Could not load verse: ${err.message}`
