@@ -214,7 +214,11 @@ export default function OperatorPage() {
         .finally(() => setIsLoadingXRefs(false));
 
     } catch (err) {
-      setError(`Could not load verse: ${err.message}`);
+      const notFound = /404|not found|no verse/i.test(err.message);
+      setError(notFound
+        ? `${formatReference(ref)} is not available.`
+        : `Could not load verse: ${err.message}`
+      );
     } finally {
       setIsLoadingVerse(false);
       processingLockRef.current = false;
