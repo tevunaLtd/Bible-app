@@ -23,8 +23,9 @@ function stripHtml(html) {
 // ── Free source (bible-api.com) ──────────────────────────────
 
 export async function fetchFromFreeApi(translationId, book, chapter, verseStart, verseEnd) {
-  const ve       = verseEnd ?? verseStart;
-  const range    = ve !== verseStart ? `${verseStart}-${ve}` : `${verseStart}`;
+  const vs       = verseStart || 1;
+  const ve       = verseEnd ?? vs;
+  const range    = ve !== vs ? `${vs}-${ve}` : `${vs}`;
   const bookPath = book.toLowerCase().replace(/\s+/g, '+');
   const url      = `${FREE_BIBLE_BASE}/${bookPath}+${chapter}:${range}?translation=${translationId}`;
 
@@ -51,8 +52,9 @@ export async function fetchFromApiBible(apiKey, bibleId, book, chapter, verseSta
   const bookId = BOOK_IDS[book];
   if (!bookId) throw new Error(`Unknown book: ${book}`);
 
-  const ve        = verseEnd ?? verseStart;
-  const startId   = `${bookId}.${chapter}.${verseStart}`;
+  const vs        = verseStart || 1;
+  const ve        = verseEnd ?? vs;
+  const startId   = `${bookId}.${chapter}.${vs}`;
   const endId     = `${bookId}.${chapter}.${ve}`;
   const passageId = startId === endId ? startId : `${startId}-${endId}`;
 
