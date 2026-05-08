@@ -336,6 +336,17 @@ export default function OperatorPage() {
     e.preventDefault();
     const input = manualInput.trim();
     if (!input || isManualLoading) return;
+
+    // Navigation commands work without an API key
+    for (const { re, action } of NAV_PATTERNS) {
+      if (re.test(input)) {
+        const nav = resolveNavRef(action, currentVerseRef.current);
+        if (nav) { await loadAndDisplayVerse(nav); setManualInput(''); }
+        else setError('No verse loaded yet — load a verse first to navigate.');
+        return;
+      }
+    }
+
     setIsManualLoading(true); setError(null);
     try {
       const result = await claudeDetectReferences(anthropicKey, '', '', input);
