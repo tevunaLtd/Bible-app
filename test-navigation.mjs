@@ -111,11 +111,32 @@ console.log('\n[8] "go back" at verse 1 (clamp — ref stays 3:1)');
 const r8 = await enterWait('go back', 3000);
 log('"go back" clamped at 3:1', r8 === 'John 3:1', r8);
 
-console.log('\n[9] John 3:999 → "not available"');
+console.log('\n[9] "first verse"  (from 3:1, expect 3:1)');
+const r9 = await enterWait('first verse', 3000);
+log('"first verse" → 3:1', r9 === 'John 3:1', r9);
+
+console.log('\n[10] Load John 3:18 then "first verse"  (expect 3:1)');
+await enterExpect('John 3:18', 'John 3:18');
+const r10 = await enterExpect('first verse', 'John 3:1');
+log('"first verse" from 3:18 → 3:1', r10 === 'John 3:1', r10);
+
+console.log('\n[11] "last verse"  (John 3 has 36 verses → expect 3:36)');
+const r11 = await enterExpect('last verse', 'John 3:36');
+log('"last verse" → John 3:36', r11 === 'John 3:36', r11);
+
+console.log('\n[12] "first chapter"  (expect John 1:1)');
+const r12 = await enterExpect('first chapter', 'John 1:1');
+log('"first chapter" → John 1:1', r12 === 'John 1:1', r12);
+
+console.log('\n[13] "last chapter"  (John has 21 chapters → expect John 21:1)');
+const r13 = await enterExpect('last chapter', 'John 21:1');
+log('"last chapter" → John 21:1', r13 === 'John 21:1', r13);
+
+console.log('\n[14] John 3:999 → "not available"');
 await enter('John 3:999');
 await page.waitForTimeout(5000);
-const err9 = await getError();
-log('Shows "not available"', /not available/i.test(err9 ?? ''), err9 ?? '(no error shown)');
+const err14 = await getError();
+log('Shows "not available"', /not available/i.test(err14 ?? ''), err14 ?? '(no error shown)');
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 const passed = results.filter(r => r.ok).length;

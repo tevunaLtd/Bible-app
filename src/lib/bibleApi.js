@@ -136,6 +136,27 @@ export async function fetchVerseContent(apiBibleKey, translation, book, chapter,
   return result;
 }
 
+// ── Find last verse of a chapter ─────────────────────────────
+// Fetches the whole chapter (no verse range) and returns the max verse number.
+// Result is cached so repeat calls are free.
+export async function findLastVerse(apiBibleKey, translation, book, chapter) {
+  const cacheKey = `last:${translation.id}:${book}:${chapter}`;
+  if (verseCache.has(cacheKey)) return verseCache.get(cacheKey);
+
+  const freeId   = translation.source === 'free' ? translation.id : 'kjv';
+  const bookPath = book.toLowerCase().replace(/\s+/g, '+');
+  const url      = `${FREE_BIBLE_BASE}/${bookPath}+${chapter}?translation=${freeId}`;
+
+  const res  = await fetch(url);
+  if (!res.ok) throw new Error(`bible-api.com ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+
+  const last = (data.verses ?? []).reduce((max, v) => Math.max(max, v.verse ?? 0), 1);
+  verseCache.set(cacheKey, last);
+  return last;
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 export function formatReference(ref) {

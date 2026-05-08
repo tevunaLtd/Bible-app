@@ -16,11 +16,12 @@ import { supabase } from '../lib/supabase';
 import {
   fetchVerseContent, loadTranslationList, formatReference,
   buildTranscriptContext, buildPassageContext, exportSessionText,
+  findLastVerse,
 } from '../lib/bibleApi';
 import { claudeDetectReferences, claudeGenerateCrossRefs } from '../lib/claudeApi';
 import {
   CONFIDENCE_THRESHOLD, TRANSCRIPT_WINDOW_MS, MAX_CONTEXT_PASSAGES,
-  CHUNK_WORD_LIMIT, CHUNK_SILENCE_MS, FREE_TRANSLATIONS,
+  CHUNK_WORD_LIMIT, CHUNK_SILENCE_MS, FREE_TRANSLATIONS, CHAPTER_COUNTS,
 } from '../lib/constants';
 import VerseDisplay          from '../components/VerseDisplay';
 import CrossReferencePanel   from '../components/CrossReferencePanel';
@@ -226,14 +227,18 @@ export default function OperatorPage() {
     }
   }, [church, selectedTranslation, pushVerseToSupabase]);
 
-  // ── Navigation commands (next/prev verse/chapter) ─────────
+  // ── Navigation commands ───────────────────────────────────
   const NAV_PATTERNS = [
-    { re: /\bnext\s+chapter\b/i,                  action: 'nextChapter' },
+    { re: /\bnext\s+chapter\b/i,                            action: 'nextChapter'  },
     { re: /\b(?:previous|prev|go\s+back\s+a?)\s+chapter\b/i, action: 'prevChapter' },
-    { re: /\bnext\s+verse\b/i,                    action: 'nextVerse'   },
-    { re: /\b(?:previous|prev)\s+verse\b/i,       action: 'prevVerse'   },
-    { re: /^\s*next\s*$/i,                        action: 'nextVerse'   },
-    { re: /^\s*(?:previous|prev|go\s+back)\s*$/i, action: 'prevVerse'   },
+    { re: /\b(?:last|final)\s+chapter\b/i,                  action: 'lastChapter'  },
+    { re: /\bfirst\s+chapter\b/i,                           action: 'firstChapter' },
+    { re: /\bnext\s+verse\b/i,                              action: 'nextVerse'    },
+    { re: /\b(?:previous|prev)\s+verse\b/i,                 action: 'prevVerse'    },
+    { re: /\b(?:last|final)\s+verse\b/i,                    action: 'lastVerse'    },
+    { re: /\bfirst\s+verse\b/i,                             action: 'firstVerse'   },
+    { re: /^\s*next\s*$/i,                                  action: 'nextVerse'    },
+    { re: /^\s*(?:previous|prev|go\s+back)\s*$/i,           action: 'prevVerse'    },
   ];
 
   function resolveNavRef(action, verse) {
@@ -241,19 +246,31 @@ export default function OperatorPage() {
     const { book, chapter, verseStart } = verse;
     if (action === 'nextVerse')    return { book, chapter, verseStart: verseStart + 1 };
     if (action === 'prevVerse')    return { book, chapter, verseStart: Math.max(1, verseStart - 1) };
+    if (action === 'firstVerse')   return { book, chapter, verseStart: 1 };
     if (action === 'nextChapter')  return { book, chapter: chapter + 1, verseStart: 1 };
     if (action === 'prevChapter')  return { book, chapter: Math.max(1, chapter - 1), verseStart: 1 };
+    if (action === 'firstChapter') return { book, chapter: 1, verseStart: 1 };
+    if (action === 'lastChapter')  return { book, chapter: CHAPTER_COUNTS[book] ?? chapter, verseStart: 1 };
+    // 'lastVerse' is handled asynchronously in the callers
     return null;
+  }
+
+  async function resolveLastVerse(verse) {
+    if (!verse) return null;
+    const last = await findLastVerse(church?.apibible_key, selectedTranslation, verse.book, verse.chapter);
+    return { book: verse.book, chapter: verse.chapter, verseStart: last };
   }
 
   // ── NLP ───────────────────────────────────────────────────
   const processChunk = useCallback(async (chunk) => {
     if (!chunk.trim() || !anthropicKey) return;
 
-    // Check for navigation commands first — no API call needed
+    // Check for navigation commands first — no (or one) API call needed
     for (const { re, action } of NAV_PATTERNS) {
       if (re.test(chunk)) {
-        const nav = resolveNavRef(action, currentVerseRef.current);
+        const nav = action === 'lastVerse'
+          ? await resolveLastVerse(currentVerseRef.current)
+          : resolveNavRef(action, currentVerseRef.current);
         if (nav) { await loadAndDisplayVerse(nav); return; }
         break;
       }
@@ -338,10 +355,12 @@ export default function OperatorPage() {
     const input = manualInput.trim();
     if (!input || isManualLoading) return;
 
-    // Navigation commands work without an API key
+    // Navigation commands — no Anthropic key needed
     for (const { re, action } of NAV_PATTERNS) {
       if (re.test(input)) {
-        const nav = resolveNavRef(action, currentVerseRef.current);
+        const nav = action === 'lastVerse'
+          ? await resolveLastVerse(currentVerseRef.current)
+          : resolveNavRef(action, currentVerseRef.current);
         if (nav) { await loadAndDisplayVerse(nav); setManualInput(''); }
         else setError('No verse loaded yet — load a verse first to navigate.');
         return;
