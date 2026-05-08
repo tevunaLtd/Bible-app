@@ -382,6 +382,23 @@ export default function OperatorPage() {
     }
   }
 
+  // ── Direct reference parser — no API call ────────────────
+  // Handles "John 3:16", "1 Cor 13:4-7", "Ps 23:1", etc.
+  function parseDirectRef(input) {
+    const m = input.trim().match(
+      /^((?:\d\s*)?[A-Za-z][A-Za-z\s]*?)\s+(\d+):(\d+)(?:\s*[-–—]\s*(\d+))?\s*$/
+    );
+    if (!m) return null;
+    const raw  = m[1].trim().replace(/^(\d)\s*/, (_, n) => n + ' ');
+    const book = raw.replace(/\b\w/g, c => c.toUpperCase());
+    if (!CHAPTER_COUNTS[book]) return null;
+    const chapter    = parseInt(m[2], 10);
+    const verseStart = parseInt(m[3], 10);
+    const verseEnd   = m[4] ? parseInt(m[4], 10) : verseStart;
+    if (chapter < 1 || verseStart < 1) return null;
+    return { book, chapter, verseStart, verseEnd };
+  }
+
   // ── Manual lookup ─────────────────────────────────────────
   async function handleManualSubmit(e) {
     e.preventDefault();
@@ -398,6 +415,14 @@ export default function OperatorPage() {
         else setError('No verse loaded yet — load a verse first to navigate.');
         return;
       }
+    }
+
+    // Direct parse — skip Claude entirely for explicit references
+    const direct = parseDirectRef(input);
+    if (direct) {
+      await loadAndDisplayVerse(direct);
+      setManualInput('');
+      return;
     }
 
     setIsManualLoading(true); setError(null);
