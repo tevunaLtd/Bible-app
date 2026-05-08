@@ -52,7 +52,7 @@ export async function claudeGenerateCrossRefs(anthropicKey, reference, verseText
     headers: HEADERS(anthropicKey),
     body: JSON.stringify({
       model:      XREF_MODEL,
-      max_tokens: 1024,
+      max_tokens: 512,
       system:     'You are a Bible scholar generating cross-references for live sermon display. Return valid JSON only, no markdown.',
       messages: [{
         role:    'user',

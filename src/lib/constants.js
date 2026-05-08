@@ -1,6 +1,6 @@
 // ── Claude models ────────────────────────────────────────────
 export const DETECT_MODEL  = 'claude-haiku-4-5-20251001'; // fast, for live detection
-export const XREF_MODEL    = 'claude-sonnet-4-6';          // smarter, for cross-references
+export const XREF_MODEL    = 'claude-haiku-4-5-20251001'; // haiku for speed
 
 // ── API endpoints ────────────────────────────────────────────
 export const ANTHROPIC_API   = 'https://api.anthropic.com/v1/messages';
