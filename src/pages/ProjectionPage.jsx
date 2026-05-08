@@ -115,8 +115,17 @@ export default function ProjectionPage() {
       >
         {verse ? (
           <>
+            <p className="font-sans font-semibold tracking-widest mb-3"
+               style={{ fontSize: refClamp, color: gold }}>
+              {verse.reference}
+            </p>
+            <p className="font-sans uppercase tracking-widest mb-10"
+               style={{ fontSize: `clamp(0.55rem, 0.9vw, 0.9rem)`, color: '#3a4a5a' }}>
+              {verse.translationName}
+            </p>
+
             {isMulti ? (
-              <div className="space-y-5 mb-12 font-serif leading-relaxed"
+              <div className="space-y-5 font-serif leading-relaxed"
                    style={{ fontSize: fontClamp }}>
                 {verse.verses.map(v => (
                   <p key={v.verseNumber}>
@@ -128,20 +137,11 @@ export default function ProjectionPage() {
                 ))}
               </div>
             ) : (
-              <p className="font-serif leading-relaxed mb-12"
+              <p className="font-serif leading-relaxed"
                  style={{ fontSize: fontClamp }}>
                 "{verse.text}"
               </p>
             )}
-
-            <p className="font-sans font-semibold tracking-widest"
-               style={{ fontSize: refClamp, color: gold }}>
-              {verse.reference}
-            </p>
-            <p className="font-sans uppercase tracking-widest mt-3"
-               style={{ fontSize: `clamp(0.55rem, 0.9vw, 0.9rem)`, color: '#3a4a5a' }}>
-              {verse.translationName}
-            </p>
           </>
         ) : (
           /* Idle — shown only when no verse is live */

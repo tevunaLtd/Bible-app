@@ -83,11 +83,28 @@ export default function ProjectionPreview({ verse, church, fontSize = 3, onFontC
             >
               {verse ? (
                 <div className="w-full flex flex-col items-center justify-center gap-0" style={{ maxHeight: '100%', overflow: 'hidden' }}>
+                  <p style={{
+                    color: gold, fontFamily: 'sans-serif',
+                    fontSize: rs, fontWeight: 700,
+                    letterSpacing: '0.1em', textAlign: 'center',
+                    marginBottom: '1.5%',
+                  }}>
+                    {verse.reference}
+                  </p>
+                  <p style={{
+                    color: '#3a4a5a', fontFamily: 'sans-serif',
+                    fontSize: `calc(${rs} * 0.75)`,
+                    letterSpacing: '0.18em', textTransform: 'uppercase',
+                    marginBottom: '4%',
+                  }}>
+                    {verse.translationName}
+                  </p>
+
                   {isMulti ? (
                     <div style={{
                       color: textCol, fontFamily: 'Georgia, serif',
                       fontSize: fs, lineHeight: 1.55, textAlign: 'center',
-                      marginBottom: '5%', overflowY: 'auto', maxHeight: '72%', width: '100%',
+                      overflowY: 'auto', maxHeight: '72%', width: '100%',
                     }}>
                       {verse.verses.map(v => (
                         <p key={v.verseNumber} style={{ marginBottom: '0.35em' }}>
@@ -100,27 +117,10 @@ export default function ProjectionPreview({ verse, church, fontSize = 3, onFontC
                     <p style={{
                       color: textCol, fontFamily: 'Georgia, serif',
                       fontSize: fs, lineHeight: 1.55, textAlign: 'center',
-                      marginBottom: '5%',
                     }}>
                       "{verse.text}"
                     </p>
                   )}
-
-                  <p style={{
-                    color: gold, fontFamily: 'sans-serif',
-                    fontSize: rs, fontWeight: 700,
-                    letterSpacing: '0.1em', textAlign: 'center',
-                  }}>
-                    {verse.reference}
-                  </p>
-                  <p style={{
-                    color: '#3a4a5a', fontFamily: 'sans-serif',
-                    fontSize: `calc(${rs} * 0.75)`,
-                    letterSpacing: '0.18em', textTransform: 'uppercase',
-                    marginTop: '1.5%',
-                  }}>
-                    {verse.translationName}
-                  </p>
                 </div>
               ) : (
                 /* Idle state */

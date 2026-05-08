@@ -31,8 +31,14 @@ export default function VerseDisplay({ verse, mode, colors = {} }) {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-8 px-4 animate-fade-in">
+      <p className="font-sans font-semibold text-lg tracking-wide mb-1" style={{ color: gold }}>
+        {verse.reference}
+      </p>
+      <p className="font-sans text-xs mb-6 uppercase tracking-widest" style={{ color: muted }}>
+        {verse.translationName}
+      </p>
       {isMultiVerse ? (
-        <div className={`font-serif leading-relaxed mb-6 w-full max-w-3xl text-center space-y-3 ${size}`}
+        <div className={`font-serif leading-relaxed w-full max-w-3xl text-center space-y-3 ${size}`}
              style={{ color: colors.text || '#f5ead6' }}>
           {verse.verses.map(v => (
             <p key={v.verseNumber}>
@@ -44,17 +50,11 @@ export default function VerseDisplay({ verse, mode, colors = {} }) {
           ))}
         </div>
       ) : (
-        <blockquote className={`font-serif leading-relaxed mb-6 text-center ${size}`}
+        <blockquote className={`font-serif leading-relaxed text-center ${size}`}
                     style={{ color: colors.text || '#f5ead6' }}>
           "{verse.text}"
         </blockquote>
       )}
-      <p className="font-sans font-semibold text-lg tracking-wide" style={{ color: gold }}>
-        {verse.reference}
-      </p>
-      <p className="font-sans text-xs mt-1 uppercase tracking-widest" style={{ color: muted }}>
-        {verse.translationName}
-      </p>
     </div>
   );
 }
