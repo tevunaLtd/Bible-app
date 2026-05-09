@@ -431,7 +431,13 @@ export default function OperatorPage() {
       const refs = result.references ?? [];
       if (!refs.length) setError(`Could not parse "${input}" as a Bible reference.`);
       else { await loadAndDisplayVerse(refs[0]); setManualInput(''); }
-    } catch (err) { setError(`Lookup failed: ${err.message}`); }
+    } catch (err) {
+      const msg = err.message ?? '';
+      if (/credit balance|too low|billing/i.test(msg))
+        setError('Anthropic API credits exhausted — please top up at console.anthropic.com.');
+      else
+        setError(`Lookup failed: ${msg}`);
+    }
     finally { setIsManualLoading(false); }
   }
 
